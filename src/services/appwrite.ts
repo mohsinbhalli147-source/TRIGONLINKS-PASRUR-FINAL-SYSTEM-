@@ -145,6 +145,27 @@ class AppwriteServiceClass {
     );
     return response.documents.map((doc) => AppwriteServiceClass.decode(doc as SchemalessDocument));
   }
+
+  /**
+   * The most recent rows of a collection, newest first.
+   *
+   * The activity log grows without bound - every save appends a row - so pulling
+   * all of it every cycle would download hundreds of rows twenty times a minute
+   * to show an operator something they will never scroll back to. Ordering by
+   * creation time and capping the page keeps that cost flat.
+   */
+  public async listRecentDocs(
+    collectionKey: CollectionKey,
+    limit: number
+  ): Promise<AppRecord[]> {
+    const databases = this.requireDatabases();
+    const response = await databases.listDocuments(
+      this.connection!.databaseId,
+      this.collectionId(collectionKey),
+      [Query.orderDesc('$createdAt'), Query.limit(limit)]
+    );
+    return response.documents.map((doc) => AppwriteServiceClass.decode(doc as SchemalessDocument));
+  }
 }
 
 export const AppwriteService = new AppwriteServiceClass();

@@ -11,14 +11,21 @@
  * client cannot grant itself access to a row by naming a different area.
  */
 import type { NextFunction, Request, Response } from 'express';
-import { AuthError, rateLimit, type AuthProfile, type SessionClaims } from './auth';
+import { AuthError, invalidateIdentityCaches, rateLimit, type AuthProfile, type SessionClaims } from './auth';
 import {
   COLLECTIONS,
   deleteDocument as appwriteDelete,
+  getDocument,
   permissionsForArea,
   upsertDocument,
   type CollectionKey,
 } from './appwrite-rest';
+import {
+  credentialCollectionId,
+  hashCnic,
+  isPlausibleCnic,
+  normaliseCnic,
+} from './subscriber-credentials';
 import {
   authorizeWrite,
   invalidateAreaCaches,
@@ -67,6 +74,51 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/**
+ * Keeps the subscriber sign-in credential in step with the customer record.
+ *
+ * Subscriber sign-in is user ID plus CNIC, checked against a PBKDF2 hash in the
+ * server-only credential collection. That hash used to be written only by
+ * `npm run provision`, so an operator who added a connection in the panel
+ * produced a subscriber who could not sign in until somebody remembered to run a
+ * provisioning script. Re-hashing on write closes that gap, and it re-hashes only
+ * when the CNIC on the record has actually changed, so a routine edit does not
+ * invalidate a working password.
+ *
+ * Failures are logged and swallowed: this must never fail the customer write
+ * that triggered it. A customer with no usable CNIC is left for provision to
+ * report, exactly as before.
+ */
+async function syncSubscriberCredential(customer: Record<string, unknown>): Promise<void> {
+  try {
+    const id = String(customer.id ?? '');
+    if (!id) return;
+
+    const cnic = normaliseCnic(customer.cnic);
+    if (!isPlausibleCnic(cnic)) return;
+
+    const existing = (await getDocument<Record<string, unknown>>(
+      credentialCollectionId,
+      id
+    )) as { cnicDigits?: string } | null;
+
+    if (existing && existing.cnicDigits === cnic) return;
+
+    const hashed = hashCnic(cnic);
+    await upsertDocument(credentialCollectionId, id, {
+      id,
+      customerId: id,
+      cnicDigits: cnic,
+      hash: hashed.hash,
+      salt: hashed.salt,
+      iterations: hashed.iterations,
+      userIdLabel: (customer.username as string | undefined) ?? null,
+    });
+  } catch (error) {
+    console.warn('[write] could not refresh the subscriber credential:', error);
+  }
+}
+
 async function perform(deps: WriteRouteDeps, decision: AuthorizedWrite): Promise<Record<string, unknown>> {
   if (decision.operation === 'delete') {
     await appwriteDelete(COLLECTIONS[decision.collection], decision.documentId);
@@ -88,8 +140,16 @@ async function perform(deps: WriteRouteDeps, decision: AuthorizedWrite): Promise
     permissionsForArea(decision.areaId, COLLECTIONS[decision.collection])
   );
 
-  // A write changes the customer -> area mapping other writes are judged against.
-  if (decision.collection === 'customers') invalidateAreaCaches();
+  // A write changes the customer -> area mapping other writes are judged against,
+  // and the sign-in index that maps a user ID to a subscriber. Both were cached
+  // with a five minute lifetime and nothing invalidated them, so a subscriber
+  // created or renamed by an operator could not sign in until the cache happened
+  // to expire.
+  if (decision.collection === 'customers') {
+    invalidateAreaCaches();
+    invalidateIdentityCaches();
+    await syncSubscriberCredential(decision.payload);
+  }
 
   return {
     ok: true,

@@ -1503,6 +1503,43 @@ function isPendingWrite(docId: string): boolean {
 }
 
 /**
+ * Union merge for a collection that only ever grows, such as the audit log.
+ *
+ * `mergeDeduplicated` would drop local rows the remote page does not contain,
+ * which is correct for a replace-style collection but wrong here: the remote
+ * page is capped, so entries outside it are not deleted, they are simply not in
+ * this response. Newest-first ordering is preserved and the local cap still
+ * applies.
+ */
+function mergeAppendOnly<T extends { id: string }>(
+  localList: T[],
+  remoteList: T[]
+): { rows: T[]; changed: boolean } {
+  const deletedIds = getDeletedIds();
+  const byId = new Map<string, T>();
+
+  for (const item of localList) {
+    if (item?.id && !deletedIds.has(item.id)) byId.set(item.id, item);
+  }
+
+  let changed = false;
+  for (const remote of remoteList) {
+    if (!remote?.id) continue;
+    if (deletedIds.has(remote.id)) continue;
+    if (byId.has(remote.id)) continue;
+    byId.set(remote.id, remote);
+    changed = true;
+  }
+
+  // Newest first, which is how the activity log is stored and displayed.
+  const rows = Array.from(byId.values())
+    .sort((a, b) => String((b as { timestamp?: string }).timestamp ?? '').localeCompare(String((a as { timestamp?: string }).timestamp ?? '')))
+    .slice(0, MAX_ACTIVITY_ENTRIES);
+
+  return { rows, changed };
+}
+
+/**
  * Field-by-field comparison. Cheaper than JSON.stringify on every record for
  * every poll, and it still detects nested changes because record values are
  * themselves plain objects.
@@ -1675,7 +1712,18 @@ const SYNCED_COLLECTIONS: Array<{
   storageKey: string;
   read: () => Array<{ id: string }>;
   write: (rows: Array<{ id: string }>) => void;
+  /**
+   * Append-only collections are merged by id without letting a remote page
+   * truncate what is already held, and can cap how much they pull. The activity
+   * log grows on every single save, so pulling all of it every cycle would
+   * download hundreds of rows twenty times a minute.
+   */
+  appendOnly?: boolean;
+  pullLimit?: number;
 }> = [];
+
+/** How many activity-log rows a device pulls per cycle. */
+const ACTIVITY_LOG_PULL_LIMIT = 100;
 
 /** Registers the storage accessors once the service object exists. */
 function registerSyncedCollections(): void {
@@ -1692,11 +1740,30 @@ function registerSyncedCollections(): void {
     ['inventory', STORAGE_KEYS.INVENTORY, StorageService.getInventory, (rows) => saveData(STORAGE_KEYS.INVENTORY, rows as unknown as InventoryItem[])],
     ['expenses', STORAGE_KEYS.EXPENSES, StorageService.getExpenses, (rows) => saveData(STORAGE_KEYS.EXPENSES, rows as unknown as Expense[])],
     ['announcements', STORAGE_KEYS.ANNOUNCEMENTS, StorageService.getAnnouncements, (rows) => saveData(STORAGE_KEYS.ANNOUNCEMENTS, rows as unknown as Announcement[])],
+    ['deletionRequests', STORAGE_KEYS.DELETION_REQUESTS, StorageService.getDeletionRequests, (rows) => saveData(STORAGE_KEYS.DELETION_REQUESTS, rows as unknown as DeletionRequest[])],
   ];
 
   for (const [key, storageKey, read, write] of entries) {
-    SYNCED_COLLECTIONS.push({ key, storageKey, read, write: write as (rows: Array<{ id: string }>) => void });
+    SYNCED_COLLECTIONS.push({
+      key,
+      storageKey,
+      read,
+      write: write as (rows: Array<{ id: string }>) => void,
+    });
   }
+
+  // The audit log and the deletion queue are the two collections that were being
+  // written to the server but never read back, so a second device never saw
+  // another operator's actions or a pending approval request. Both are small
+  // enough to pull in full except the log, which is capped.
+  SYNCED_COLLECTIONS.push({
+    key: 'activityLogs',
+    storageKey: STORAGE_KEYS.ACTIVITY,
+    read: () => StorageService.getActivityLogs(),
+    write: (rows) => saveData(STORAGE_KEYS.ACTIVITY, rows as unknown as ActivityLog[]),
+    appendOnly: true,
+    pullLimit: ACTIVITY_LOG_PULL_LIMIT,
+  });
 }
 
 let realtimeCleanup: (() => void) | null = null;
@@ -1732,10 +1799,21 @@ export const StorageService = {
         for (const entry of SYNCED_COLLECTIONS) {
           if (stopped) return;
           try {
-            const remote = (await AppwriteService.listDocs(entry.key)) as Array<{ id: string }>;
+            const remote = entry.pullLimit
+              ? ((await AppwriteService.listRecentDocs(entry.key, entry.pullLimit)) as Array<{
+                  id: string;
+                }>)
+              : ((await AppwriteService.listDocs(entry.key)) as Array<{ id: string }>);
             if (!remote || remote.length === 0) continue;
-            const { merged, changed } = mergeDeduplicated(entry.read(), remote);
-            if (changed) entry.write(merged);
+            if (entry.appendOnly) {
+              // Union, not replace: this collection only ever grows, so a
+              // capped page must never discard entries this device already has.
+              const merged = mergeAppendOnly(entry.read(), remote);
+              if (merged.changed) entry.write(merged.rows);
+            } else {
+              const { merged, changed } = mergeDeduplicated(entry.read(), remote);
+              if (changed) entry.write(merged);
+            }
           } catch (err) {
             // One failing collection must not abort the rest of the cycle.
             console.warn(`[Sync] ${entry.storageKey} pull failed:`, err);
