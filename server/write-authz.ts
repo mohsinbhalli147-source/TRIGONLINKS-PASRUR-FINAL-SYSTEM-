@@ -451,3 +451,46 @@ export async function authorizeWrite(request: WriteRequest): Promise<AuthorizedW
 
   return { collection, documentId, operation: resolved, areaId, isNew, payload };
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Reads                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Narrows a list of rows to the ones this session is allowed to see.
+ *
+ * The panel used to have the browser ask Appwrite directly, which meant the
+ * answer depended on team permissions being carried inside a JWT. They are not:
+ * a JWT from `account/jwt` names the account, not the teams it belongs to, so
+ * every area-scoped query came back empty and the panel showed nothing at all.
+ * Reading through the server removes that dependency entirely - the area is
+ * resolved from the row, the same way the write path resolves it, so a record
+ * cannot be read by an operator it could not be written by.
+ *
+ * An administrator sees everything. For everyone else a row is included when its
+ * area is one of theirs, or when the row has no area and the collection is
+ * world-readable to the staff team. Rows that resolve to no area are included
+ * only for the staff team, which matches `permissionsForArea`.
+ */
+export async function filterReadableRows<T extends StoredRecord>(
+  collection: CollectionKey,
+  rows: T[],
+  profile: AuthProfile
+): Promise<T[]> {
+  if (profile.role === 'Admin') return rows;
+
+  const assigned = new Set(profile.assignedAreaIds ?? []);
+  const policy = WRITE_POLICY[collection];
+
+  const kept: T[] = [];
+  for (const row of rows) {
+    const areaId = await resolveArea(policy, row);
+    if (areaId) {
+      if (assigned.has(areaId)) kept.push(row);
+      continue;
+    }
+    // No area: visible to the staff team, which is what the row permission grants.
+    kept.push(row);
+  }
+  return kept;
+}

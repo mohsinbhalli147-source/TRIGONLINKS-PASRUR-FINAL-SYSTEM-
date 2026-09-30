@@ -16,6 +16,7 @@ import {
   COLLECTIONS,
   deleteDocument as appwriteDelete,
   getDocument,
+  listDocuments,
   permissionsForArea,
   upsertDocument,
   type CollectionKey,
@@ -28,8 +29,10 @@ import {
 } from './subscriber-credentials';
 import {
   authorizeWrite,
+  filterReadableRows,
   invalidateAreaCaches,
   isWritableCollection,
+  WRITE_POLICY,
   type AuthorizedWrite,
 } from './write-authz';
 
@@ -64,6 +67,19 @@ function assertUsableCollection(value: string): CollectionKey {
     throw new AuthError('Unknown collection.', 404);
   }
   return name;
+}
+
+/**
+ * Reads accept every collection the panel syncs, not only the writable ones.
+ * Activity logs, deletion requests and settings have no write policy because the
+ * server writes them itself, but staff still have to be able to read them.
+ */
+function assertReadableCollection(value: string): CollectionKey {
+  const name = String(value ?? '').trim();
+  if (!Object.prototype.hasOwnProperty.call(COLLECTIONS, name)) {
+    throw new AuthError('Unknown collection.', 404);
+  }
+  return name as CollectionKey;
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -293,6 +309,41 @@ export function registerWriteRoutes(app: import('express').Express, deps: WriteR
 
       const result = await perform(deps, decision);
       res.json(result);
+    })
+  );
+
+  /**
+   * Reads a collection, narrowed to what this session may see.
+   *
+   * The browser used to ask Appwrite directly with a JWT, which returned nothing
+   * for area-scoped collections: a JWT names the account, not the teams it is in,
+   * so the row permission lists never matched. The server has the API key and
+   * resolves the area the same way the write path does, so a row is readable
+   * exactly when it is writable.
+   */
+  app.get(
+    '/api/data/:collection',
+    deps.asyncRoute(async (req, res) => {
+      const claims = deps.requireSession(req);
+      const profile = await resolveStaffForWrite(claims);
+
+      const collection = assertReadableCollection(req.params.collection);
+
+      const limit = rateLimit(`read:${claims.uid}`, 900, 60_000);
+      if (!limit.allowed) throw new AuthError('Too many refreshes. Try again shortly.', 429);
+
+      const rows = await listDocuments<Record<string, unknown>>(COLLECTIONS[collection], {
+        limit: 5000,
+      });
+      const visible = await filterReadableRows(collection, rows, profile);
+
+      // Newest first, so a record that has just been filed is at the top rather
+      // than wherever it happens to sort in the stored order.
+      visible.sort((a, b) =>
+        String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))
+      );
+
+      res.json({ ok: true, collection, documents: visible });
     })
   );
 }

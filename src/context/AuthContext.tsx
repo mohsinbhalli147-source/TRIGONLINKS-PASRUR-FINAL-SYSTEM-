@@ -8,7 +8,6 @@ import {
   fetchSessionProfile,
   login as apiLogin,
   logout as apiLogout,
-  refreshAppwriteToken,
   type AuthProfile,
   type AppwriteConnection,
 } from '../services/authApi';
@@ -36,15 +35,6 @@ interface AuthContextType {
 }
 
 const SESSION_SECTION_KEY = 'trigon_active_section';
-
-/**
- * How often to renew the Appwrite JWT, in milliseconds.
- *
- * Appwrite 2.x tokens last 15 minutes. Renewing at 10 leaves room for a tick
- * that lands late, and costs one cheap request, since the server trades its
- * stored session cookie for the new token rather than re-checking a password.
- */
-const TOKEN_REFRESH_INTERVAL_MS = 10 * 60_000;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -110,7 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return;
         }
 
-        AppwriteService.init(config, grant.token);
+        AppwriteService.init(config);
         setUser(session.profile);
         setActiveSectionState(storedSection ?? 'dashboard');
       } catch (error) {
@@ -129,46 +119,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   /**
-   * Keeps the Appwrite JWT alive for as long as the panel is open.
+   * Signs the user out the moment a read says the session is no longer valid.
    *
-   * A short lived token that simply expired would break every read at once, so
-   * it is renewed on a timer and again whenever the tab comes back to the
-   * foreground, which covers a laptop that was asleep past the expiry. A 401
-   * here means the upstream session is genuinely gone, so the user is signed
-   * out rather than left clicking through failures.
+   * Reads go through the server, so a 401 or 403 on any of them is authoritative:
+   * the cookie was cleared, expired, or the account lost its access. Without this
+   * the panel would sit there showing an empty table with no explanation, which
+   * is exactly the failure this listener exists to make legible.
    */
   useEffect(() => {
-    if (!user || user.role === 'Customer' || !connection) return;
+    if (!user) return;
 
-    let cancelled = false;
-
-    const renew = async (): Promise<void> => {
-      try {
-        const grant = await refreshAppwriteToken();
-        if (cancelled || !grant) return;
-        AppwriteService.setSession(grant.token);
-      } catch (error) {
-        if (cancelled) return;
-        if (error instanceof ApiError && error.status === 401) {
-          setUser(null);
-          AppwriteService.clearSession();
-        }
-      }
+    const onExpired = (): void => {
+      setUser(null);
+      AppwriteService.clearSession();
     };
 
-    const onVisible = (): void => {
-      if (document.visibilityState === 'visible') void renew();
-    };
-
-    const interval = window.setInterval(() => void renew(), TOKEN_REFRESH_INTERVAL_MS);
-    document.addEventListener('visibilitychange', onVisible);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [user, connection]);
+    window.addEventListener('trigon_session_expired', onExpired);
+    return () => window.removeEventListener('trigon_session_expired', onExpired);
+  }, [user]);
 
   const login = useCallback(
     async (
@@ -184,7 +152,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       try {
         const result = await apiLogin({ identifier: identifier.trim(), password });
-        AppwriteService.init(connection, result.appwrite.token);
+        AppwriteService.init(connection);
         setUser(result.profile);
         setActiveSection('dashboard');
         return { success: true };

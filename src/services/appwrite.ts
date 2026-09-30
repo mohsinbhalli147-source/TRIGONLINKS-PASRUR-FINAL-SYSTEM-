@@ -1,19 +1,19 @@
-import { Client, Databases, Query } from 'appwrite';
 import type { AppwriteConnection } from './authApi';
 
 /**
- * READ-ONLY Appwrite access for the staff panel.
+ * Reading operational data for the staff panel.
  *
- * The browser talks to Appwrite directly, using the session token issued at
- * login, to read operational data. That is the whole of its access: there is no
- * create, update or delete method on this service, and none can be added without
- * the same authorization gap reopening.
+ * The browser used to talk to Appwrite directly, holding a JWT issued at login.
+ * That silently returned nothing: a JWT names the account, not the teams it
+ * belongs to, so the `read("team:area_...")` grant on every row never matched and
+ * every area-scoped collection came back empty. Reads now go through the server,
+ * which has the API key and resolves the area the same way the write path does.
  *
- * Writes go to the server instead - see src/services/writeApi.ts. The server
- * checks the caller's role, section, function grant and area against the record
- * as it is actually stored, then writes with the API key. The browser never
- * sends a permission list, because the browser is not the thing that should
- * decide who may see a row.
+ * The consequence is that the browser holds no Appwrite credential at all. There
+ * is no create, update or delete method on this service, and there is no session
+ * token to escalate, because none is issued. Writes went to the server before
+ * this change for the same reason - see src/services/writeApi.ts - and the two
+ * paths now agree on one rule: the server decides what a session may see.
  *
  * Subscribers do not use this module at all: they read their own data from the
  * server's /api/portal endpoint, which is scoped to their session.
@@ -39,18 +39,8 @@ export const COLLECTIONS = {
 
 export type CollectionKey = keyof typeof COLLECTIONS;
 
-const PAGE_LIMIT = 5000;
-
 /** Fields that must never be mirrored into the browser's local cache. */
 const CREDENTIAL_FIELDS = ['password', 'passwordHash', 'pppoePassword', 'secret'] as const;
-
-interface SchemalessDocument {
-  $id: string;
-  data?: string;
-  recordId?: string;
-  $createdAt: string;
-  $updatedAt: string;
-}
 
 type AppRecord = Record<string, unknown> & { id: string };
 
@@ -67,8 +57,6 @@ export function redactRecord<T>(record: T): T {
 }
 
 class AppwriteServiceClass {
-  private client: Client | null = null;
-  private databases: Databases | null = null;
   private connection: AppwriteConnection | null = null;
   private ready = false;
 
@@ -77,73 +65,49 @@ class AppwriteServiceClass {
   }
 
   public getIsConfigured(): boolean {
-    return this.ready && this.databases !== null;
+    return this.ready;
   }
 
   public getConnection(): AppwriteConnection | null {
     return this.connection;
   }
 
-  /** Idempotent. Safe to call again after a session change. */
-  public init(connection: AppwriteConnection, token: string): void {
+  /**
+   * Records the connection details. There is no credential to attach: the
+   * httpOnly session cookie is the only thing that authorises a read, and the
+   * browser never sees a token.
+   */
+  public init(connection: AppwriteConnection): void {
     this.connection = connection;
-    this.client = new Client()
-      .setEndpoint(connection.endpoint)
-      .setProject(connection.projectId)
-      .setJWT(token);
-    this.databases = new Databases(this.client);
     this.ready = true;
   }
 
-  public setSession(token: string): void {
-    this.client?.setJWT(token);
-  }
-
   public clearSession(): void {
-    this.client?.setJWT('');
     this.ready = false;
-    this.databases = null;
-    this.client = null;
-  }
-
-  private requireDatabases(): Databases {
-    if (!this.databases) {
-      throw new Error('Appwrite is not connected. Sign in to continue.');
-    }
-    return this.databases;
-  }
-
-  private static decode(doc: SchemalessDocument): AppRecord {
-    let parsed: Record<string, unknown> = {};
-    if (typeof doc.data === 'string') {
-      try {
-        parsed = JSON.parse(doc.data) as Record<string, unknown>;
-      } catch {
-        parsed = {};
-      }
-    }
-    return { ...parsed, id: doc.$id };
-  }
-
-  private collectionId(key: CollectionKey): string {
-    return COLLECTIONS[key];
+    this.connection = null;
   }
 
   /**
-   * Reads a collection.
-   *
-   * Row-level read permissions decide what comes back, so this needs no
-   * filtering of its own: a technician only receives documents whose area team
-   * they belong to.
+   * Reads a collection, through the server.
    */
   public async listDocs(collectionKey: CollectionKey): Promise<AppRecord[]> {
-    const databases = this.requireDatabases();
-    const response = await databases.listDocuments(
-      this.connection!.databaseId,
-      this.collectionId(collectionKey),
-      [Query.limit(PAGE_LIMIT)]
-    );
-    return response.documents.map((doc) => AppwriteServiceClass.decode(doc as SchemalessDocument));
+    const response = await fetch(`/api/data/${collectionKey}`, {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        // The session is gone or has lost its access. Surface it rather than
+        // leaving the panel showing a permanently empty table.
+        window.dispatchEvent(new CustomEvent('trigon_session_expired'));
+        return [];
+      }
+      throw new Error(`Could not load ${collectionKey} (${response.status}).`);
+    }
+
+    const body = (await response.json()) as { documents?: AppRecord[] };
+    return Array.isArray(body.documents) ? body.documents : [];
   }
 
   /**
@@ -151,20 +115,15 @@ class AppwriteServiceClass {
    *
    * The activity log grows without bound - every save appends a row - so pulling
    * all of it every cycle would download hundreds of rows twenty times a minute
-   * to show an operator something they will never scroll back to. Ordering by
-   * creation time and capping the page keeps that cost flat.
+   * to show an operator something they will never scroll back to. The server
+   * already returns newest-first, so the cap is applied here.
    */
   public async listRecentDocs(
     collectionKey: CollectionKey,
     limit: number
   ): Promise<AppRecord[]> {
-    const databases = this.requireDatabases();
-    const response = await databases.listDocuments(
-      this.connection!.databaseId,
-      this.collectionId(collectionKey),
-      [Query.orderDesc('$createdAt'), Query.limit(limit)]
-    );
-    return response.documents.map((doc) => AppwriteServiceClass.decode(doc as SchemalessDocument));
+    const all = await this.listDocs(collectionKey);
+    return all.slice(0, limit);
   }
 }
 
