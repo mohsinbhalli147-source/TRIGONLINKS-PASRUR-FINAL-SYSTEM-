@@ -42,10 +42,22 @@ customer-app/
 Subscribers sign in with their **Trigon Links user ID plus the CNIC on file**.
 Both factors must match the same record. Neither is treated as sufficient alone.
 
-The CNIC is **never stored**. `npm run provision` writes a PBKDF2-SHA512 hash
-(210,000 iterations, per-subscriber random salt) into a `subscriber_credentials`
+Trigon Links keeps the CNIC on the **customer record** itself, in plaintext. It
+is the second factor for subscriber sign-in, so it cannot be a hash there: the
+server reads `customer.cnic` to compare against the number being presented, and
+staff use it for verification, search, printed slips and CSV export.
+
+`npm run provision` **additionally** writes a PBKDF2-SHA512 hash (210,000
+iterations, per-subscriber random salt) into a `subscriber_credentials`
 collection whose collection permissions are deliberately **empty** — no team or
-user role can read it, only the server API key can.
+user role can read it, only the server API key can. That collection is not
+where the CNIC is kept; it is the password-equivalent copy used to verify a
+sign-in attempt.
+
+What the hash collection also stores is `cnicDigits`, the plaintext digits, so a
+re-run can tell whether a corrected CNIC needs re-hashing. That copy is
+redundant with the customer record and is the obvious next thing to remove; see
+"Known outstanding items".
 
 Subscribers get **no Appwrite account at all**. They have no data access in
 Appwrite, so a session token would grant nothing; everything they see is
@@ -504,19 +516,20 @@ navigation to `undefined`.
 
 ## Known outstanding items
 
-- **A raw CNIC is stored in two places, and this README previously said it was
-  not.** `README.md` and `customer-app/PRIVACY-POLICY.md` both claim the CNIC is
-  only ever kept as a one-way hash, but the live data shows otherwise:
-  - the `customers` collection carries a plaintext `cnic` field on all 21 records
-    (a normal business field staff browse and that syncs to Appwrite);
-  - `subscriber_credentials` stores `cnicDigits` in plaintext next to the hash,
-    written by `provisionSubscriberCredentials` so it can tell whether a CNIC
-    changed and needs re-hashing.
-  Both are real mismatches between the documentation and reality. They are left
-  as-is pending a decision: the customer record may genuinely need the CNIC for
-  billing/verification, in which case the docs should say so, and only the
-  redundant `cnicDigits` copy should go. Nothing was changed. See the handover
-  notes.
+- **`customer-app/PRIVACY-POLICY.md` still overstates the protection.** It says
+  "We store a one-way salted hash of it, not the number itself, so a copy of our
+  database cannot be used to reconstruct identity numbers." The hash is real, but
+  it is not the only copy: the CNIC is also held in plaintext on the customer
+  record, because it is the second sign-in factor and staff verify against it.
+  The subscriber-facing text needs to be corrected to say the number is retained
+  for identity verification and is visible to authorised staff, rather than
+  claiming it is never stored. The README wording is now accurate; the customer
+  app's is not, and it is the one subscribers actually read.
+- `subscriber_credentials.cnicDigits` is redundant with the customer record and
+  exists only so a re-run can detect a corrected CNIC. Dropping it means deriving
+  "did this change" from the customer record instead, and re-hashing whenever the
+  stored hash does not verify - slower, but it removes a plaintext copy from the
+  one collection that is otherwise server-only. Not done; it needs a migration.
 - The sign-in response still returns a 15 minute Appwrite JWT to JavaScript, and
   Appwrite's stateless JWTs mean a signed-out token stays readable for up to 15
   minutes. Both close together, by proxying reads through the server. See "Sign-in
@@ -525,10 +538,6 @@ navigation to `undefined`.
   that areas are assigned when granting a role. Three of the six real accounts
   (`staff-support`, `staff-1790400279196`, `staff-1790403523522`) currently have
   none, so they cannot create or edit customers, invoices, payments or expenses.
-- `src/hooks/usePWAInstall.ts` has no callers since the install button was
-  removed. It is a working `beforeinstallprompt` hook and the manifest supports
-  installability, so it was left in place rather than deleted; wire it to a
-  button or remove it.
 - The subscriber app is a PWA, not a Play Store APK. Wrapping the built bundle
   with Capacitor is the remaining step if you need one.
 - CSV exports and Google Drive backups contain subscriber PII (national ID,

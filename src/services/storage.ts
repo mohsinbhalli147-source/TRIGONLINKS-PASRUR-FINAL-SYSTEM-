@@ -1905,17 +1905,6 @@ export const StorageService = {
     syncDocToAppwrite('areas', area.id, area);
     StorageService.logActivity(userEmail, 'User', 'Area Saved', 'areas', `Saved service area ${area.name} (${area.code})`);
   },
-  deleteArea(id: string, userEmail: string = 'admin@trigonlinks.pk'): void {
-    deleteRecord({
-      collection: 'areas',
-      storageKey: STORAGE_KEYS.AREAS,
-      read: () => StorageService.getAreas(),
-      id,
-      userEmail,
-      action: 'Area Deleted',
-      detail: `Deleted area ID ${id}`,
-    });
-  },
 
   // Connections
   /**
@@ -2630,17 +2619,6 @@ export const StorageService = {
     saveData(STORAGE_KEYS.ANNOUNCEMENTS, list);
     syncDocToAppwrite('announcements', ann.id, ann);
     StorageService.logActivity(userEmail, 'User', 'Announcement Published', 'announcements', `Published ${ann.title}`);
-  },
-  deleteAnnouncement(id: string, userEmail: string = 'admin@trigonlinks.pk'): void {
-    deleteRecord({
-      collection: 'announcements',
-      storageKey: STORAGE_KEYS.ANNOUNCEMENTS,
-      read: () => StorageService.getAnnouncements(),
-      id,
-      userEmail,
-      action: 'Announcement Deleted',
-      detail: `Deleted announcement ID ${id}`,
-    });
   },
 
   // Activity Logs
