@@ -4,8 +4,11 @@ dist/
 coverage/
 .DS_Store
 *.log
+*.err
+*.pid
 .env*
 !.env.example
+!.env.*.example
 
 # Written once by "npm run provision" with every generated password in it.
 provisioning-credentials.txt
