@@ -17,6 +17,8 @@
     "verify:password": "tsx scripts/verify-password-generation.ts",
     "verify:write-queue": "tsx scripts/verify-write-queue.ts",
     "verify:sw": "tsx scripts/verify-service-worker.ts",
+    "reset:to-fresh": "tsx scripts/reset-to-fresh.ts",
+    "seed:area": "tsx scripts/seed-first-area.ts",
     "verify:cleanup-fixtures": "tsx scripts/cleanup-verify-fixtures.ts"
   },
   "dependencies": {
