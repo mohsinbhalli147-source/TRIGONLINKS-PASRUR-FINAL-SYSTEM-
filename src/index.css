@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Accessibility & Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thermal POS Printer & Invoice Print Profiles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-receipt-area, #printable-receipt-area * {
+    visibility: visible;
+  }
+
+  #printable-receipt-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white !important;
+    color: black !important;
+    font-family: monospace, sans-serif !important;
+  }
+
+  .no-print, header, aside, nav {
+    display: none !important;
+  }
+}

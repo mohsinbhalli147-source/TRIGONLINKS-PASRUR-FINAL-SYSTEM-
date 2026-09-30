@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme: dark, matching the web UI. -->
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:statusBarColor">@color/slateBackground</item>
+        <item name="android:navigationBarColor">@color/slateBackground</item>
+        <item name="android:windowBackground">@color/slateBackground</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:statusBarColor">@color/slateBackground</item>
+        <item name="android:windowBackground">@color/slateBackground</item>
+    </style>
+
+    <!--
+      Launch theme. A flat background rather than a bitmap splash: it is a few
+      kilobytes instead of a few hundred, and it cannot be letterboxed or
+      stretched on the many screen ratios Android ships with.
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@color/slateBackground</item>
+        <item name="android:statusBarColor">@color/slateBackground</item>
+        <item name="android:navigationBarColor">@color/slateBackground</item>
+        <item name="windowSplashScreenBackground">@color/slateBackground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>

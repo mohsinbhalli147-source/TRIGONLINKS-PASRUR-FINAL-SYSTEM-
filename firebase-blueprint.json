@@ -1,0 +1,363 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "Internet customer subscription record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "mobile": { "type": "string" },
+        "email": { "type": "string" },
+        "cnic": { "type": "string" },
+        "address": { "type": "string" },
+        "areaId": { "type": "string" },
+        "areaName": { "type": "string" },
+        "packageId": { "type": "string" },
+        "packageName": { "type": "string" },
+        "packageSpeed": { "type": "string" },
+        "monthlyFee": { "type": "number" },
+        "ipCharges": { "type": "number" },
+        "iptvCharges": { "type": "number" },
+        "connectionFee": { "type": "number" },
+        "totalMonthly": { "type": "number" },
+        "installDate": { "type": "string" },
+        "billingDate": { "type": "number" },
+        "connectionType": { "type": "string", "enum": ["Fiber", "Wireless", "Cable"] },
+        "device": { "type": "string" },
+        "ipAddress": { "type": "string" },
+        "iptvAddress": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Suspended"] },
+        "walletBalance": { "type": "number" },
+        "assignedInventory": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "username", "mobile", "areaId", "packageId", "totalMonthly", "status"]
+    },
+    "Package": {
+      "title": "Package",
+      "description": "Internet package plan details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "speed": { "type": "string" },
+        "price": { "type": "number" },
+        "description": { "type": "string" },
+        "dataLimit": { "type": "string" },
+        "contractPeriod": { "type": "string" },
+        "installationFee": { "type": "number" },
+        "equipmentFee": { "type": "number" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "speed", "price", "status"]
+    },
+    "Connection": {
+      "title": "Connection",
+      "description": "New customer onboarding connection request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "areaId": { "type": "string" },
+        "areaName": { "type": "string" },
+        "packageId": { "type": "string" },
+        "packageName": { "type": "string" },
+        "installDate": { "type": "string" },
+        "equipmentDetails": { "type": "string" },
+        "assignedStaff": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Completed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "customerName", "mobile", "areaId", "packageId", "status"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Customer monthly bill invoice",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerMobile": { "type": "string" },
+        "month": { "type": "string" },
+        "year": { "type": "number" },
+        "amount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Paid", "Unpaid", "Partial"] },
+        "breakdown": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "invoiceNumber", "customerId", "amount", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Received billing payment record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "invoiceId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["Cash", "Bank Transfer", "JazzCash", "EasyPaisa", "Online", "Wallet"] },
+        "reference": { "type": "string" },
+        "discount": { "type": "number" },
+        "discountReason": { "type": "string" },
+        "date": { "type": "string" },
+        "collectedBy": { "type": "string" }
+      },
+      "required": ["id", "receiptNumber", "customerId", "amount", "method", "date"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "ISP company employee and operator record with RBAC permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "mobile": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Technician", "Support", "Operator", "Other"] },
+        "salary": { "type": "number" },
+        "joinDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "allAreas": { "type": "boolean" },
+        "assignedAreaIds": { "type": "array" },
+        "allowedSections": { "type": "array" },
+        "allowedFunctions": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "status"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "ISP equipment stock item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" },
+        "supplier": { "type": "string" },
+        "status": { "type": "string", "enum": ["In Stock", "Low Stock", "Out of Stock"] },
+        "minStock": { "type": "number" },
+        "unit": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "categoryName", "quantity", "price"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Company operational expense",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "areaId": { "type": "string" },
+        "areaName": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "amount", "date"]
+    },
+    "Area": {
+      "title": "Area",
+      "description": "ISP Service coverage area / zone",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] }
+      },
+      "required": ["id", "name", "status"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Customer service complaint",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ticketNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerMobile": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Urgent"] },
+        "assignedStaff": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Working", "Solved"] },
+        "createdAt": { "type": "string" },
+        "resolvedAt": { "type": "string" }
+      },
+      "required": ["id", "customerId", "category", "priority", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "SMS and WhatsApp message sent to customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "template": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "customerId", "message", "date"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "System-wide broadcast for staff or customers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["General", "Staff", "Customer"] },
+        "targetAudience": { "type": "string", "enum": ["All", "Staff Only", "Customers Only"] },
+        "message": { "type": "string" },
+        "date": { "type": "string" },
+        "author": { "type": "string" }
+      },
+      "required": ["id", "title", "message", "date"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "System audit trail record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "collection": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "userEmail", "action"]
+    },
+    "SettingsConfig": {
+      "title": "SettingsConfig",
+      "description": "ISP company and billing configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "shortName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "licenseNumber": { "type": "string" },
+        "billingCycle": { "type": "string" },
+        "defaultDueDays": { "type": "number" },
+        "lateFeePercentage": { "type": "number" },
+        "taxRatePercentage": { "type": "number" },
+        "notifyBillReminders": { "type": "boolean" },
+        "notifyPaymentConfirmations": { "type": "boolean" },
+        "notifyConnectionUpdates": { "type": "boolean" },
+        "notifyMonthlyReports": { "type": "boolean" }
+      },
+      "required": ["id", "companyName", "email"]
+    },
+    "DeletionRequest": {
+      "title": "DeletionRequest",
+      "description": "Dual control sensitive record deletion approval queue",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "entityTitle": { "type": "string" },
+        "requestedBy": { "type": "string" },
+        "requestedByEmail": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+        "createdAt": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "reviewedAt": { "type": "string" }
+      },
+      "required": ["id", "entityType", "entityId", "requestedByEmail", "status"]
+    }
+  },
+  "firestore": {
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customers collection containing all active and suspended subscribers"
+    },
+    "/packages/{packageId}": {
+      "schema": "Package",
+      "description": "Internet bandwidth packages and pricing plans"
+    },
+    "/connections/{connectionId}": {
+      "schema": "Connection",
+      "description": "Pending and approved customer onboarding connection requests"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Billing invoices generated per subscriber"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Received subscriber payments and receipts"
+    },
+    "/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Staff employee directory and permission profiles"
+    },
+    "/inventory/{inventoryId}": {
+      "schema": "InventoryItem",
+      "description": "Hardware and fiber stock items"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Operating expenses and vendor payments"
+    },
+    "/areas/{areaId}": {
+      "schema": "Area",
+      "description": "ISP coverage regions and distribution zones"
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Customer issues, tickets and complaints"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "SMS and WhatsApp message communications"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "System bulletins and notices"
+    },
+    "/activity/{activityId}": {
+      "schema": "ActivityLog",
+      "description": "System audit trail records"
+    },
+    "/settings/{settingsId}": {
+      "schema": "SettingsConfig",
+      "description": "Company profile and billing settings"
+    },
+    "/deletion-requests/{requestId}": {
+      "schema": "DeletionRequest",
+      "description": "Admin approval queue for deletions"
+    }
+  }
+}

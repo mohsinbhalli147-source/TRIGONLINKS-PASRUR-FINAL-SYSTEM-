@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the app's Tailwind slate-950 background exactly, so the launch
+         window, the splash and the first React paint are the same colour and
+         there is no flash. -->
+    <color name="slateBackground">#020617</color>
+
+    <color name="colorPrimary">#06B6D4</color>
+    <color name="colorPrimaryDark">#020617</color>
+    <color name="colorAccent">#3B82F6</color>
+</resources>

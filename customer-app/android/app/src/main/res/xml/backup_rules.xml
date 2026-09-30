@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing is backed up: the session lives in an httpOnly cookie and the app
+     stores no personal data on disk. Excluding it keeps subscriber data out of
+     Google device-to-device transfer and out of ADB backups. -->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

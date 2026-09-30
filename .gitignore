@@ -1,0 +1,29 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Written once by "npm run provision" with every generated password in it.
+provisioning-credentials.txt
+
+# This project is npm-based (see the scripts in package.json). A bun.lock
+# alongside package-lock.json is a conflicting resolution from a different
+# package manager, not a second source of truth.
+bun.lock
+bun.lockb
+
+# Firebase service-account keys and the Android client config both carry real
+# credentials, unlike firebase-applet-config.json, which is the public web
+# config that is meant to reach the browser.
+firebase-adminsdk-*.json
+*service-account*.json
+google-services.json
+customer-app/android/app/google-services.json
+
+# Machine-specific Android SDK path.
+local.properties
+customer-app/android/local.properties

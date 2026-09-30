@@ -1,0 +1,6 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive launcher icon background. Matches the app background so the
+         masked icon blends into the launcher on a dark device. -->
+    <color name="ic_launcher_background">#020617</color>
+</resources>

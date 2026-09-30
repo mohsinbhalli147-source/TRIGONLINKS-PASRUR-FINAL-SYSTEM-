@@ -1,0 +1,36 @@
+{
+  "name": "trigon-customer-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Subscriber app for Trigon Links. Signs in with user ID + CNIC and shows profile, payment history and complaints. Talks to the same Trigon Links server as the admin panel.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "icons": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\generate-android-icons.ps1",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug",
+    "android:aab": "npm run android:sync && cd android && gradlew.bat bundleRelease",
+    "android:bundle": "npm run android:sync && cd android && gradlew.bat bundleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

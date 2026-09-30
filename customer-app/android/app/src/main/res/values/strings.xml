@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Trigon Links</string>
+    <string name="title_activity_main">Trigon Links</string>
+    <string name="package_name">pk.trigonlinks.subscriber</string>
+    <string name="custom_url_scheme">pk.trigonlinks.subscriber</string>
+
+    <!-- Play Store listing copy -->
+    <string name="store_tagline">Your bill, your payments, your support.</string>
+    <string name="store_short_description">Check your Trigon Links bill and payment history, and report problems from your phone.</string>
+    <string name="store_full_description">Trigon Links lets every subscriber manage their own connection from their phone.\n\nWHAT YOU CAN DO\n• Sign in with the user ID and CNIC on your bill\n• See your current package, speed, monthly bill and outstanding dues\n• View every bill and every payment receipt\n• Get your PPPoE username, password and IP address for router setup\n• Report a fault and track your support ticket\n\nSUPPORT\nThe NOC team sees your tickets as soon as you send them. For urgent outages please call the Trigon Links helpline.</string>
+</resources>
