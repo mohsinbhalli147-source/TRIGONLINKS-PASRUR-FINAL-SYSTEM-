@@ -100,6 +100,23 @@ async function perform(deps: WriteRouteDeps, decision: AuthorizedWrite): Promise
 
 export function registerWriteRoutes(app: import('express').Express, deps: WriteRouteDeps): void {
   /**
+   * Resolves the staff profile for a write.
+   *
+   * A subscriber session is refused here, before any profile lookup. They have
+   * no staff record and their session carries a synthetic id, so trying to load a
+   * staff profile for them asks Appwrite for a user id that does not exist and
+   * comes back as a 500 from a request that should have been a plain 403. The
+   * write policy refuses subscribers too - this just makes the refusal clean and
+   * keeps a routine permission check out of the error log.
+   */
+  const resolveStaffForWrite = async (claims: SessionClaims): Promise<AuthProfile> => {
+    if (claims.role === 'Customer') {
+      throw new AuthError('Your account cannot change operational records.', 403);
+    }
+    return deps.resolveProfile(claims);
+  };
+
+  /**
    * Bulk push, registered before the `:collection` route so the literal path is
    * not swallowed by the parameterised one.
    */
@@ -108,7 +125,7 @@ export function registerWriteRoutes(app: import('express').Express, deps: WriteR
     deps.asyncRoute(async (req, res) => {
       deps.assertSameOrigin(req);
       const claims = deps.requireSession(req);
-      const profile = await deps.resolveProfile(claims);
+      const profile = await resolveStaffForWrite(claims);
 
       const limit = rateLimit(`bulk:${claims.uid}`, 30, 60_000);
       if (!limit.allowed) throw new AuthError('Too many sync attempts. Try again shortly.', 429);
@@ -167,7 +184,7 @@ export function registerWriteRoutes(app: import('express').Express, deps: WriteR
     deps.asyncRoute(async (req, res) => {
       deps.assertSameOrigin(req);
       const claims = deps.requireSession(req);
-      const profile = await deps.resolveProfile(claims);
+      const profile = await resolveStaffForWrite(claims);
 
       const limit = rateLimit(`write:${claims.uid}`, 600, 60_000);
       if (!limit.allowed) throw new AuthError('Too many changes. Try again shortly.', 429);
@@ -200,7 +217,7 @@ export function registerWriteRoutes(app: import('express').Express, deps: WriteR
     deps.asyncRoute(async (req, res) => {
       deps.assertSameOrigin(req);
       const claims = deps.requireSession(req);
-      const profile = await deps.resolveProfile(claims);
+      const profile = await resolveStaffForWrite(claims);
 
       const collection = assertUsableCollection(req.params.collection);
       const documentId = assertUsableDocumentId(req.params.documentId);

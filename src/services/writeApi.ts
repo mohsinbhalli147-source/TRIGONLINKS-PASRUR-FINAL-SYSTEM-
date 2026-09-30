@@ -27,10 +27,26 @@ export class WriteRejectedError extends Error {
  * A rejection that will never succeed on retry: the server is not going to
  * change its mind about permissions. The pending-write queue uses this to drop a
  * record instead of retrying it five times and stalling everything behind it.
+ *
+ * 429 is deliberately excluded. It means "too many requests right now", not
+ * "this will never work", and it used to be treated as permanent because it is
+ * under 500 - so a write that hit a rate limit was dropped from the retry queue
+ * and silently lost. The server also sends 429 for its own sign-in limiter, and
+ * 425 for a not-yet-ready backend, both of which clear on their own.
+ *
+ * Retryable on top of those: 408 (request timeout) and 425 (too early).
+ * Genuinely permanent: 400, 401, 403, 404, 409 and 422 - the payload, the
+ * session or the record is wrong, and repeating the same call changes nothing.
  */
 export function isPermanentRejection(error: unknown): boolean {
-  return error instanceof WriteRejectedError && error.status !== 0 && error.status < 500;
+  if (!(error instanceof WriteRejectedError)) return false;
+  // status 0 is a network failure, and 5xx is a server fault. Both clear up.
+  if (error.status === 0 || error.status >= 500) return false;
+  return !RETRYABLE_STATUSES.has(error.status);
 }
+
+/** Statuses that mean "wait and try again", not "this is wrong". */
+const RETRYABLE_STATUSES = new Set([408, 425, 429]);
 
 async function readError(response: Response, fallback: string): Promise<string> {
   try {

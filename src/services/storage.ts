@@ -1311,10 +1311,20 @@ function syncDocToAppwrite(collectionKey: CollectionKey, docId: string, data: un
   });
 }
 
+/**
+ * Deletes one row from Appwrite, queueing it if the delete does not land.
+ *
+ * This used to warn and forget. Because the local copy is removed at the same
+ * time, a failed delete left the row alive on the server with the API key's
+ * permissions but gone from this browser, and nothing ever retried it - so the
+ * two copies stayed out of step until someone happened to re-add that id. Creates
+ * and updates have queued for a long time; deletes now do too.
+ */
 function deleteDocFromAppwrite(collectionKey: CollectionKey, docId: string) {
   registerDeletedId(docId);
   removeDocument(collectionKey, docId).catch((err: unknown) => {
     console.warn(`[write] delete failed for ${collectionKey}/${docId}:`, err);
+    enqueueRetry(collectionKey, docId, null, err, 'delete');
   });
 }
 
@@ -1355,6 +1365,11 @@ function deleteRecord<T extends { id: string }>(input: {
 interface PendingWrite {
   collection: CollectionKey;
   docId: string;
+  /**
+   * `upsert` is the default so that queue entries written before deletes were
+   * queued keep replaying correctly.
+   */
+  kind?: 'upsert' | 'delete';
   payload: unknown;
   attempts: number;
 }
@@ -1386,7 +1401,8 @@ function enqueueRetry(
   collection: CollectionKey,
   docId: string,
   payload: unknown,
-  error?: unknown
+  error?: unknown,
+  kind: 'upsert' | 'delete' = 'upsert'
 ): void {
   /**
    * A rejected change is not a pending change. If the server refused it because
@@ -1404,7 +1420,7 @@ function enqueueRetry(
   const entries = readPending().filter(
     (entry) => !(entry.collection === collection && entry.docId === docId)
   );
-  entries.push({ collection, docId, payload, attempts: 0 });
+  entries.push({ collection, docId, kind, payload, attempts: 0 });
   writePending(entries);
 }
 
@@ -1418,12 +1434,18 @@ export async function flushPendingWrites(): Promise<number> {
   for (const entry of entries) {
     if (entry.attempts >= MAX_ATTEMPTS) continue; // give up rather than loop forever
     try {
-      await pushDocument(entry.collection, entry.docId, entry.payload);
+      // A queued delete replays as a delete, not as an upsert that would
+      // resurrect the record.
+      if (entry.kind === 'delete') {
+        await removeDocument(entry.collection, entry.docId);
+      } else {
+        await pushDocument(entry.collection, entry.docId, entry.payload);
+      }
       flushed += 1;
     } catch (error) {
       if (isPermanentRejection(error)) {
         console.warn(
-          `[write] dropped queued ${entry.collection}/${entry.docId}: the server rejected it permanently.`
+          `[write] dropped queued ${entry.kind ?? 'upsert'} ${entry.collection}/${entry.docId}: the server rejected it permanently.`
         );
         continue;
       }
