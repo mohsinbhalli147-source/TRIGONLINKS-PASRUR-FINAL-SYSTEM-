@@ -108,9 +108,26 @@ export function verifySession(token: string | undefined): SessionClaims | null {
   return claims;
 }
 
-export function setSessionCookie(res: Response, claims: SessionClaims): void {
+/**
+ * Staff and subscriber sessions use different cookies.
+ *
+ * A cookie is not scoped to a port, so the staff panel on 3010 and the
+ * subscriber app on 5174 - same host, different port - share one cookie jar. A
+ * single name meant that signing in as a subscriber replaced the staff session,
+ * and the panel's own reads then came back 403 for a Customer role. That is not
+ * only an error to read: the panel treats a 403 as a lost session and drops the
+ * user, which unmounted the open form mid-edit.
+ */
+export const STAFF_SESSION_COOKIE = 'trigon_staff_session';
+export const SUBSCRIBER_SESSION_COOKIE = 'trigon_subscriber_session';
+
+export function setSessionCookie(
+  res: Response,
+  claims: SessionClaims,
+  cookieName: string = STAFF_SESSION_COOKIE
+): void {
   const maxAge = Math.max(0, claims.exp * 1000 - Date.now());
-  res.cookie(config.session.cookieName, signSession(claims), {
+  res.cookie(cookieName, signSession(claims), {
     httpOnly: true,
     sameSite: 'strict',
     secure: config.nodeEnv === 'production',
@@ -126,7 +143,7 @@ export function clearSessionCookie(res: Response): void {
     secure: config.nodeEnv === 'production',
     path: '/',
   };
-  res.clearCookie(config.session.cookieName, base);
+  res.clearCookie(STAFF_SESSION_COOKIE, base);
   res.clearCookie(GRANT_COOKIE_NAME, base);
 }
 

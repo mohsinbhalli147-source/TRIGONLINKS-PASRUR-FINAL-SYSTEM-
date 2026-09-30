@@ -18,6 +18,8 @@ import {
   refreshAppwriteGrant,
   setGrantCookie,
   setSessionCookie,
+  STAFF_SESSION_COOKIE,
+  SUBSCRIBER_SESSION_COOKIE,
   verifySession,
 } from './server/auth';
 import {
@@ -46,6 +48,17 @@ app.disable('x-powered-by');
 const appwriteOrigin = new URL(config.appwrite.endpoint).origin;
 const appwriteWs = appwriteOrigin.replace(/^http/, 'ws');
 
+/**
+ * Vite's hot-reload socket.
+ *
+ * Without it the dev server's websocket is refused by this policy, so an edit is
+ * not picked up and the page has to be hard-refreshed by hand - which is also
+ * how a stale bundle survives a fix and looks like the fix did not work.
+ * Development only: in production there is no dev server to connect to, and the
+ * wildcard below is exactly the sort of thing that should not ship.
+ */
+const viteHmr = isProduction ? [] : ['ws://localhost:*', 'ws://127.0.0.1:*'];
+
 const csp = [
   "default-src 'self'",
   // Tailwind injects a stylesheet at runtime and several views use style props.
@@ -53,7 +66,7 @@ const csp = [
   ...(isProduction
     ? ["script-src 'self'"]
     : ["script-src 'self' 'unsafe-inline' 'unsafe-eval'"]),
-  `connect-src 'self' ${appwriteOrigin} ${appwriteWs} https://www.googleapis.com https://accounts.google.com`,
+  `connect-src 'self' ${appwriteOrigin} ${appwriteWs} https://www.googleapis.com https://accounts.google.com ${viteHmr.join(' ')}`,
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "object-src 'none'",
@@ -107,10 +120,30 @@ function assertSameOrigin(req: Request): void {
   }
 }
 
+/**
+ * Staff session.
+ *
+ * Reads the staff cookie specifically, never the subscriber one. Both apps live
+ * on the same host and a cookie ignores the port, so a subscriber signing in
+ * used to overwrite the staff session and every panel read then failed with a
+ * 403 that the client read as "session lost" - which closed the form the
+ * operator was in the middle of editing.
+ */
 function requireSession(req: Request): SessionClaims {
-  const token = parseCookies(req)[config.session.cookieName];
-  const claims = verifySession(token);
+  const claims = verifySession(parseCookies(req)[STAFF_SESSION_COOKIE]);
   if (!claims) throw new AuthError('Your session has expired. Please sign in again.', 401);
+  if (claims.role === 'Customer') {
+    throw new AuthError('This is a subscriber session. Please sign in to the staff panel.', 403);
+  }
+  return claims;
+}
+
+function requireSubscriber(req: Request): SessionClaims {
+  const claims = verifySession(parseCookies(req)[SUBSCRIBER_SESSION_COOKIE]);
+  if (!claims) throw new AuthError('Your session has expired. Please sign in again.', 401);
+  if (claims.role !== 'Customer') {
+    throw new AuthError('This is a staff session. Please sign in to the subscriber app.', 403);
+  }
   return claims;
 }
 
@@ -254,8 +287,10 @@ app.post(
       cnic: String(req.body?.cnic ?? ''),
     });
 
-    // No grant cookie: this session never touches Appwrite.
-    setSessionCookie(res, result.claims);
+    // No grant cookie: this session never touches Appwrite. The cookie name is
+    // the subscriber one so signing in here cannot replace a staff session in
+    // the panel - they share a host and cookies ignore the port.
+    setSessionCookie(res, result.claims, SUBSCRIBER_SESSION_COOKIE);
     res.json({ profile: result.profile });
   })
 );
@@ -264,8 +299,19 @@ app.post(
   '/api/auth/logout',
   asyncRoute(async (req, res) => {
     assertSameOrigin(req);
-    const claims = verifySession(parseCookies(req)[config.session.cookieName]);
+    const cookies = parseCookies(req);
+
+    // Both names are cleared, because either app can call this and the other
+    // one's cookie is sitting in the same jar.
+    const claims =
+      verifySession(cookies[STAFF_SESSION_COOKIE]) ?? verifySession(cookies[SUBSCRIBER_SESSION_COOKIE]);
     clearSessionCookie(res);
+    res.clearCookie(SUBSCRIBER_SESSION_COOKIE, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: config.nodeEnv === 'production',
+      path: '/',
+    });
 
     if (claims?.appwriteSessionId) {
       // Revoke upstream so the token in the browser stops working immediately.
@@ -476,14 +522,6 @@ registerWriteRoutes(app, {
 /*  they see is assembled here from the caller's own session, so a subscriber  */
 /*  cannot reach another subscriber's data even with a valid token.           */
 /* -------------------------------------------------------------------------- */
-
-function requireSubscriber(req: Request): SessionClaims {
-  const claims = requireSession(req);
-  if (claims.role !== 'Customer') {
-    throw new AuthError('This endpoint is for subscriber accounts.', 403);
-  }
-  return claims;
-}
 
 /**
  * Exactly which fields a subscriber may see.

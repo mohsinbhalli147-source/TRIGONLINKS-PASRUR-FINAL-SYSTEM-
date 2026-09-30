@@ -1,0 +1,35 @@
+Stop a subscriber sign-in from signing the operator out of the panel
+
+A cookie is scoped to a host, not a port. The staff panel on 3010 and the
+subscriber app on 5174 share one jar, and they also shared one cookie name, so
+signing in as a subscriber replaced the staff session outright. Every panel read
+then came back 403 for a Customer role.
+
+The visible symptom was not an error message, it was a form that closed itself.
+The panel treats a 403 on a read as a lost session and clears the user, which
+unmounts the screen - so an operator editing a staff member had the modal
+disappear as soon as they typed a character into the name field, and had to
+reopen it. It was reported as "the field deselects after one letter".
+
+Staff and subscriber sessions now use separate cookies, and each guard refuses
+the other role outright rather than reading whatever happens to be in the jar.
+Signing out clears both, since either app can call it.
+
+verify:session-isolation drives the real sequence in one jar, the way a browser
+does: staff sign in, staff read, subscriber sign in, staff read again. That last
+step is the one that used to 403.
+
+Also allows Vite's hot-reload websocket in development. The policy was refusing
+it, so an edit was never picked up and the page had to be hard-refreshed by hand
+- which is also how a stale bundle outlives a fix and makes the fix look broken.
+Production is unchanged; there is no dev server to connect to there.
+
+An earlier attempt blamed browser autofill and added a script to suppress it.
+That was the wrong diagnosis, and it is removed rather than left in as dead code
+next to the real fix.
+
+Verified: typecheck and build clean, verify:session-isolation 8/8,
+verify:write-authz 48/48 (including H1, a subscriber session attempting a write),
+verify:auth 17/17, verify:read-path 8/8, verify:portal-isolation-live 9/9,
+verify:write-queue 20/20, verify:fresh-subscriber 5/5, verify:password 5/5,
+verify:sw 9/9.
