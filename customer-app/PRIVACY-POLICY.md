@@ -20,10 +20,19 @@ collects only what is needed to show you your own service:
 
 ## How your CNIC is used
 
-Your CNIC is used for one purpose: to confirm that you are the subscriber when you
-sign in. We store a one-way salted hash of it, not the number itself, so a copy of
-our database cannot be used to reconstruct identity numbers. Your CNIC is never
-used as a password and is never shown in full inside the app.
+Your CNIC is stored to verify your identity at sign-in. It is visible to
+authorised Trigon Links staff and is included in your bill and activation slip.
+
+We keep it in two forms. The number itself is held on your subscriber record,
+because it is the second factor that proves you are the account holder when you
+sign in, and because staff need it to confirm your identity during installation,
+billing and support. Alongside that record we also store a one-way salted hash of
+the number, which is the value the sign-in check actually verifies against.
+
+Access to your subscriber record is restricted. Only Trigon Links staff who are
+assigned to your service area can retrieve it, and every staff action is recorded
+in an audit log. Your CNIC is never used as a password, and it is never shown in
+full inside the app: the app displays a masked form of it on your account screen.
 
 ## Who can see your data
 
